@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 import AppKit
 
 struct ContentView: View {
-    @StateObject private var runner = JobRunner()
+    @ObservedObject private var runner = JobRunner.shared
     @State private var isTargeted = false
 
     var body: some View {

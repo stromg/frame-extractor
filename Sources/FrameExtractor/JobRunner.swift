@@ -20,6 +20,11 @@ final class Job: ObservableObject, Identifiable {
 
 @MainActor
 final class JobRunner: ObservableObject {
+    // Shared across the app-icon/Dock drop path (AppDelegate) and the
+    // in-window drop zone (ContentView) — both need to land jobs in the
+    // SAME list, so this can't be a plain per-view @StateObject.
+    static let shared = JobRunner()
+
     @Published var jobs: [Job] = []
 
     // fps=12 + mpdecimate drops near-duplicate frames (long-held still
