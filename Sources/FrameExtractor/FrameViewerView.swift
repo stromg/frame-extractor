@@ -28,9 +28,19 @@ struct FrameViewerView: View {
                 // so the filename is its own selectable text, not baked
                 // into the picture.
                 VStack(spacing: 8) {
-                    Text(frameURLs[index].lastPathComponent)
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .textSelection(.enabled)
+                    HStack(spacing: 8) {
+                        Text(frameURLs[index].lastPathComponent)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .textSelection(.enabled)
+
+                        Button {
+                            copyFrameWithLabelBurntIn()
+                        } label: {
+                            Label("Copy frame", systemImage: "doc.on.doc")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .help("Copy this frame as an image, with its filename burnt into the corner — paste it anywhere and the name travels with it")
+                    }
 
                     HStack(spacing: 12) {
                         Button {
@@ -77,5 +87,44 @@ struct FrameViewerView: View {
         frameURLs = contents
             .filter { $0.pathExtension.lowercased() == "png" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    // Composites the filename into the bottom-left corner of the frame
+    // itself, then puts the RESULT (not the original) on the clipboard —
+    // Goran pastes straight into chat, so the label needs to travel
+    // WITH the picture rather than depending on him typing it separately.
+    private func copyFrameWithLabelBurntIn() {
+        guard !frameURLs.isEmpty, let original = NSImage(contentsOf: frameURLs[index]) else { return }
+        let label = frameURLs[index].lastPathComponent
+
+        let size = original.size
+        let composited = NSImage(size: size)
+        composited.lockFocus()
+        original.draw(in: NSRect(origin: .zero, size: size))
+
+        let font = NSFont.monospacedSystemFont(ofSize: max(14, size.height * 0.03), weight: .semibold)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white
+        ]
+        let textSize = (label as NSString).size(withAttributes: attributes)
+        let padding: CGFloat = 8
+        let badgeRect = NSRect(
+            x: padding,
+            y: padding,
+            width: textSize.width + padding * 2,
+            height: textSize.height + padding
+        )
+        NSColor.black.withAlphaComponent(0.75).setFill()
+        NSBezierPath(roundedRect: badgeRect, xRadius: 6, yRadius: 6).fill()
+        (label as NSString).draw(
+            at: NSPoint(x: badgeRect.minX + padding, y: badgeRect.minY + padding / 2),
+            withAttributes: attributes
+        )
+        composited.unlockFocus()
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([composited])
     }
 }
