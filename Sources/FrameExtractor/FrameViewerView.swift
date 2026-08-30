@@ -93,38 +93,63 @@ struct FrameViewerView: View {
     // itself, then puts the RESULT (not the original) on the clipboard —
     // Goran pastes straight into chat, so the label needs to travel
     // WITH the picture rather than depending on him typing it separately.
+    //
+    // Built on `CGContext` at the source image's real PIXEL dimensions,
+    // not `NSImage.lockFocus()` — `lockFocus` draws at the SCREEN's
+    // backing scale (e.g. 2x on a Retina Mac) regardless of the source
+    // PNG's own pixel size, and `NSImage.writeObjects` hands off a TIFF
+    // representation of that mismatched bitmap. A recording captured at
+    // 3x (this Simulator's own scale) came out corrupted/unreadable to
+    // whatever decoded it on paste ("failed to convert image") — going
+    // through `CGImage` directly sidesteps display scale entirely, and
+    // writing explicit PNG bytes is a format every paste target reads.
     private func copyFrameWithLabelBurntIn() {
-        guard !frameURLs.isEmpty, let original = NSImage(contentsOf: frameURLs[index]) else { return }
+        guard !frameURLs.isEmpty,
+              let data = try? Data(contentsOf: frameURLs[index]),
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return }
         let label = frameURLs[index].lastPathComponent
 
-        let size = original.size
-        let composited = NSImage(size: size)
-        composited.lockFocus()
-        original.draw(in: NSRect(origin: .zero, size: size))
+        let width = cgImage.width
+        let height = cgImage.height
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return }
 
-        let font = NSFont.monospacedSystemFont(ofSize: max(14, size.height * 0.03), weight: .semibold)
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: NSColor.white
-        ]
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        // CGContext is bottom-up flipped relative to AppKit text drawing —
+        // set up an NSGraphicsContext so `NSString.draw` lands right-side
+        // up and where expected (near the bottom-left of the IMAGE, which
+        // is the TOP-left of this flipped coordinate space).
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+
+        let fontSize = max(28, CGFloat(height) * 0.03)
+        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
         let textSize = (label as NSString).size(withAttributes: attributes)
-        let padding: CGFloat = 8
-        let badgeRect = NSRect(
-            x: padding,
-            y: padding,
-            width: textSize.width + padding * 2,
-            height: textSize.height + padding
-        )
+        let padding: CGFloat = fontSize * 0.5
+        let badgeRect = CGRect(x: padding, y: padding, width: textSize.width + padding * 2, height: textSize.height + padding)
+
         NSColor.black.withAlphaComponent(0.75).setFill()
         NSBezierPath(roundedRect: badgeRect, xRadius: 6, yRadius: 6).fill()
-        (label as NSString).draw(
-            at: NSPoint(x: badgeRect.minX + padding, y: badgeRect.minY + padding / 2),
-            withAttributes: attributes
-        )
-        composited.unlockFocus()
+        (label as NSString).draw(at: CGPoint(x: badgeRect.minX + padding, y: badgeRect.minY + padding / 2), withAttributes: attributes)
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let composited = context.makeImage() else { return }
+        let rep = NSBitmapImageRep(cgImage: composited)
+        guard let pngData = rep.representation(using: .png, properties: [:]) else { return }
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.writeObjects([composited])
+        pasteboard.setData(pngData, forType: .png)
     }
 }
