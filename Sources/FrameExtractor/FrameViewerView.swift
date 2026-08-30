@@ -25,6 +25,11 @@ struct FrameViewerView: View {
                 }
                 .background(Color(nsColor: .windowBackgroundColor))
 
+                Text(frameURLs[index].lastPathComponent)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .textSelection(.enabled) // so it can be copy-pasted straight into an annotation
+                    .padding(.top, 4)
+
                 HStack(spacing: 12) {
                     Button {
                         step(-1)
