@@ -5,6 +5,7 @@ import AppKit
 struct ContentView: View {
     @ObservedObject private var runner = JobRunner.shared
     @State private var isTargeted = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,8 +21,9 @@ struct ContentView: View {
             Image(systemName: "film")
                 .font(.system(size: 32))
                 .foregroundStyle(.secondary)
-            Text("Drop a screen recording here")
+            Text("Drop a recording, or a folder of already-extracted frames")
                 .font(.headline)
+                .multilineTextAlignment(.center)
             Text("fps=12 · duplicate frames dropped · resized to 390pt wide")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -65,8 +67,16 @@ struct ContentView: View {
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                 guard let data = item as? Data,
                       let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                var isDirectory: ObjCBool = false
+                let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
                 DispatchQueue.main.async {
-                    runner.enqueue(url)
+                    if exists, isDirectory.boolValue {
+                        // Already a folder of frames — open the scrubber
+                        // directly, skip ffmpeg entirely.
+                        openWindow(value: url)
+                    } else {
+                        runner.enqueue(url)
+                    }
                 }
             }
             accepted = true
