@@ -77,6 +77,7 @@ struct ContentView: View {
 
 private struct JobRow: View {
     @ObservedObject var job: Job
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -90,6 +91,14 @@ private struct JobRow: View {
             }
             Spacer()
             if case .done(let outDir, _) = job.status {
+                Button {
+                    openWindow(value: outDir)
+                } label: {
+                    Image(systemName: "square.stack")
+                }
+                .buttonStyle(.plain)
+                .help("Scrub frame by frame")
+
                 Button {
                     NSWorkspace.shared.activateFileViewerSelecting([outDir])
                 } label: {

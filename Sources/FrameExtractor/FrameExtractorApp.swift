@@ -9,5 +9,11 @@ struct FrameExtractorApp: App {
             ContentView()
         }
         .windowResizability(.contentSize)
+
+        WindowGroup("Frames", id: "frame-viewer", for: URL.self) { $folderURL in
+            if let folderURL {
+                FrameViewerView(folderURL: folderURL)
+            }
+        }
     }
 }
